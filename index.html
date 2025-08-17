@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MAESTRO DB CORE</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+        body { background-color: #000; color: #ccc; font-family: 'VT323', monospace; font-size: 1.5rem; overflow: hidden; }
+        .terminal { padding: 2rem; }
+        .line { margin-bottom: 1rem; }
+        .popup {
+            display: none; position: fixed; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #5a0000; color: #ff0000;
+            border: 2px solid #ff0000; padding: 2rem;
+            box-shadow: 0 0 20px #ff0000;
+            text-align: center;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div class="terminal" id="terminal-boot">
+        <div class="line">> INICIALIZANDO NÓ CENTRAL...</div>
+        <div class="line">> VERIFICANDO INTEGRIDADE DO NÓ... SISTEMA EM ALERTA.</div>
+    </div>
+
+    <div class="popup" id="alert-popup">
+        <div class="line">>> ANOMALIA DETECTADA. INTRUSÃO IMINENTE.</div>
+        <div class="line">>> BLOQUEANDO ACESSO... PROTOCOLO DE EXPURGO ATIVADO.</div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const bootTerminal = document.getElementById('terminal-boot');
+            const alertPopup = document.getElementById('alert-popup');
+
+            setTimeout(() => {
+                if (alertPopup) alertPopup.style.display = 'block';
+                
+                setTimeout(() => {
+                    document.body.innerHTML = '<div class="terminal"><div class="line">CONEXÃO TERMINADA.</div></div>';
+                }, 3000);
+
+            }, 10000);
+        });
+    </script>
+</body>
+</html>
