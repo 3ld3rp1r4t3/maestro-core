@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ALERTA DE INTRUSÃO - NÍVEL 2</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+        body {
+            background-color: #000;
+            color: #ff0000;
+            font-family: 'VT323', monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+        .container {
+            border: 2px solid #ff0000;
+            padding: 2rem;
+            box-shadow: 0 0 20px #ff0000;
+            width: 80%;
+            max-width: 600px;
+        }
+        #status-display {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            animation: pulse 1s infinite;
+        }
+        #timer {
+            font-size: 3rem;
+            color: #fff;
+        }
+        #symbol-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+        .symbol-button {
+            font-size: 4rem;
+            padding: 1rem;
+            background-color: transparent;
+            border: 1px solid #ff0000;
+            color: #ff0000;
+            cursor: pointer;
+            transition: all 0.1s;
+        }
+        .symbol-button:hover {
+            background-color: #ff0000;
+            color: #000;
+        }
+        .symbol-flash {
+            animation: flash 0.5s;
+        }
+        #success-link {
+            display: none;
+            margin-top: 2rem;
+        }
+        #success-link a {
+            color: #00FF41;
+            font-size: 2.5rem;
+            text-decoration: none;
+            animation: pulse-green 1s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        @keyframes pulse-green {
+            0% { text-shadow: 0 0 10px #00FF41; }
+            50% { text-shadow: 0 0 20px #00FF41; }
+            100% { text-shadow: 0 0 10px #00FF41; }
+        }
+        @keyframes flash {
+            from, to { background-color: transparent; color: #ff0000; }
+            50% { background-color: #fff; color: #000; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="status-display">> ALERTA! NÍVEL 2. EXPURGO EM T-<span id="timer">30</span> SEGUNDOS.</div>
+        <div id="symbol-grid"></div>
+        <div id="success-link">
+            <a href="#">[PORTA DE SEGURANÇA 2.2]</a>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            // --- CONFIGURAÇÕES DA SALA ---
+            const GRID_SIZE = 9;
+            const SEQUENCE_LENGTH = 4;
+            const TIMER_SECONDS = 30;
+            const SYMBOL_POOL = ['⏃', '⎔', '⍲', '⍋', '⍬', '⎓', '⏣', '⎶', '⏁', '⍯', '⍰', '⍆'];
+
+            // --- ELEMENTOS DA INTERFACE ---
+            const statusDisplay = document.getElementById('status-display');
+            const timerDisplay = document.getElementById('timer');
+            const grid = document.getElementById('symbol-grid');
+            const successLink = document.getElementById('success-link');
+
+            // --- VARIÁVEIS DE ESTADO DO JOGO ---
+            let sequence = [];
+            let playerSequence = [];
+            let canClick = false;
+            let timerId;
+
+            function startGame() {
+                // Reset
+                canClick = false;
+                playerSequence = [];
+                sequence = [];
+                grid.innerHTML = '';
+                successLink.style.display = 'none';
+                statusDisplay.innerHTML = `> ALERTA! NÍVEL 2. EXPURGO EM T-<span id="timer">${TIMER_SECONDS}</span> SEGUNDOS.`;
+                document.getElementById('timer').textContent = TIMER_SECONDS; // Garante que o timer reinicie visualmente
+
+                // Gera símbolos aleatórios para a grade
+                let gridSymbols = [...SYMBOL_POOL].sort(() => 0.5 - Math.random()).slice(0, GRID_SIZE);
+                
+                gridSymbols.forEach(symbol => {
+                    const button = document.createElement('button');
+                    button.className = 'symbol-button';
+                    button.textContent = symbol;
+                    button.onclick = () => handleSymbolClick(symbol);
+                    grid.appendChild(button);
+                });
+
+                // Gera a sequência secreta a partir dos símbolos na grade
+                for (let i = 0; i < SEQUENCE_LENGTH; i++) {
+                    sequence.push(gridSymbols[Math.floor(Math.random() * gridSymbols.length)]);
+                }
+
+                // Inicia o jogo
+                setTimeout(displaySequence, 2000); // Dá 2 segundos para o jogador se preparar
+            }
+
+            function displaySequence() {
+                let i = 0;
+                const intervalId = setInterval(() => {
+                    if (i >= sequence.length) {
+                        clearInterval(intervalId);
+                        canClick = true;
+                        startTimer();
+                        return;
+                    }
+                    const symbolToFlash = sequence[i];
+                    const buttons = Array.from(grid.children);
+                    const buttonToFlash = buttons.find(btn => btn.textContent === symbolToFlash);
+                    
+                    if (buttonToFlash) {
+                        buttonToFlash.classList.add('symbol-flash');
+                        setTimeout(() => buttonToFlash.classList.remove('symbol-flash'), 500);
+                    }
+                    i++;
+                }, 800); // Velocidade que os símbolos piscam
+            }
+
+            function handleSymbolClick(symbol) {
+                if (!canClick) return;
+                playerSequence.push(symbol);
+                
+                // Verifica se o clique está correto até agora
+                for (let i = 0; i < playerSequence.length; i++) {
+                    if (playerSequence[i] !== sequence[i]) {
+                        loseGame("SEQUÊNCIA INCORRETA");
+                        return;
+                    }
+                }
+
+                // Verifica se a sequência foi completada
+                if (playerSequence.length === sequence.length) {
+                    winGame();
+                }
+            }
+
+            function startTimer() {
+                let timeLeft = TIMER_SECONDS;
+                timerId = setInterval(() => {
+                    timeLeft--;
+                    document.getElementById('timer').textContent = timeLeft;
+                    if (timeLeft <= 0) {
+                        loseGame("TEMPO ESGOTADO");
+                    }
+                }, 1000);
+            }
+
+            function winGame() {
+                clearInterval(timerId);
+                canClick = false;
+                grid.innerHTML = '';
+                statusDisplay.textContent = "> SEQUÊNCIA VÁLIDA. ACESSO LIBERADO.";
+                successLink.style.display = 'block';
+            }
+
+            function loseGame(reason) {
+                clearInterval(timerId);
+                canClick = false;
+                grid.innerHTML = `<h2 style="grid-column: 1 / -1;">> ${reason}. REINICIANDO PROTOCOLO...</h2>`;
+                setTimeout(startGame, 3000); // Reinicia após 3 segundos
+            }
+
+            // Inicia o jogo quando a página carrega
+            startGame();
+        });
+    </script>
+</body>
+</html>
