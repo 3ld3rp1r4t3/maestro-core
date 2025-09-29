@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NÚCLEO DO SISTEMA :: DEFESA ADAPTATIVA</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Rubik+Glitch&family=VT323&display=swap');
+        body {
+            background-color: #000;
+            color: #fff;
+            font-family: 'VT323', monospace;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        #game-wrapper {
+            position: relative;
+            background-color: #111;
+            padding: 1rem;
+            border: 2px solid #fff;
+        }
+        canvas {
+            display: block;
+            background-color: #000;
+        }
+        #ui-overlay {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            width: calc(100% - 2rem);
+            text-align: center;
+            pointer-events: none;
+        }
+        #ui-overlay h1 {
+            font-size: 2rem;
+            color: #ff0000;
+            margin: 0;
+            text-shadow: 0 0 10px red;
+        }
+        #transition-text {
+            display: none;
+            color: #ff0000;
+            font-size: 4rem;
+        }
+        #reward-screen {
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background-color: #fff;
+            color: #000;
+            z-index: 100;
+        }
+        #reward-screen h2 { font-size: 3rem; color: #000; margin-bottom: 0; }
+        #reward-screen p { font-size: 1.5rem; }
+        #reward-screen a { font-size: 2.5rem; color: #008000; text-decoration: none; padding: 1rem; border: 2px solid #000; }
+        
+        #final-countdown {
+            font-size: 8rem;
+            color: #ff0000;
+            margin-top: 1rem;
+            animation: countdown-pulse 1s infinite;
+        }
+        @keyframes countdown-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-wrapper">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-overlay">
+            <h1 id="timer"></h1>
+            <h1 id="transition-text"></h1>
+        </div>
+        <div id="reward-screen">
+            <h2>> FIREWALL CONTORNADO. ACESSO TEMPORÁRIO CONCEDIDO.</h2>
+            <p>RECUPERANDO DADOS... EXPURGO DO SISTEMA EM:</p>
+            <div id="final-countdown">5</div>
+            <a href="fragmento_de_mapa_03.png" download="fragmento_de_mapa_03.png">[BAIXAR FRAGMENTO FINAL]</a>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const timerText = document.getElementById('timer');
+            const transitionText = document.getElementById('transition-text');
+            const rewardScreen = document.getElementById('reward-screen');
+
+            const STAGE_CONFIG = {
+                1: { duration: 15, arena: { width: 500, height: 500 }, attackPattern: 'all_sides' },
+                2: { duration: 25, arena: { width: 800, height: 400 }, attackPattern: 'sides_calibrated' },
+                3: { duration: 20, arena: { width: 800, height: 400 }, attackPattern: 'flappy' }
+            };
+
+            let player = { x: 0, y: 0, size: 10, speed: 4, vy: 0, onGround: false };
+            let projectiles = [];
+            let obstacles = [];
+            let keys = {};
+            let gameState = 'STARTING';
+            let currentStage = 1;
+            let timeLeft;
+            let timerInterval, attackInterval;
+
+            const GRAVITY = 0.4;
+            const JUMP_POWER = -8;
+
+            function setupStage(stage) {
+                currentStage = stage;
+                const config = STAGE_CONFIG[stage];
+                
+                canvas.width = config.arena.width;
+                canvas.height = config.arena.height;
+
+                player.x = stage === 3 ? canvas.width / 4 : canvas.width / 2;
+                player.y = canvas.height / 2;
+                player.onGround = stage === 2;
+                player.vy = 0;
+
+                projectiles = [];
+                obstacles = [];
+                keys = {};
+                timeLeft = config.duration;
+                gameState = 'PLAYING';
+                timerText.style.display = 'block';
+                transitionText.style.display = 'none';
+                timerText.textContent = `SOBREVIVA: ${timeLeft}`;
+                rewardScreen.style.display = 'none';
+
+                if (timerInterval) clearInterval(timerInterval);
+                timerInterval = setInterval(updateTimer, 1000);
+
+                if (attackInterval) clearInterval(attackInterval);
+                if (config.attackPattern === 'all_sides') {
+                    attackInterval = setInterval(createAllSidesProjectile, 150);
+                } else if (config.attackPattern === 'sides_calibrated') {
+                    attackInterval = setInterval(createSideCalibratedProjectile, 650);
+                } else if (config.attackPattern === 'flappy') {
+                    attackInterval = setInterval(createFlappyObstacle, 2000);
+                }
+            }
+
+            function updateTimer() {
+                if (gameState !== 'PLAYING') return;
+                timeLeft--;
+                timerText.textContent = `SOBREVIVA: ${timeLeft}`;
+                if (timeLeft <= 0) {
+                    if (currentStage === 1) {
+                        transitionToStage(2, ">> DEFESAS RECONFIGURADAS <<");
+                    } else if (currentStage === 2) {
+                        transitionToStage(3, ">> PROTOCOLO DE FUGA ATIVADO <<");
+                    } else {
+                        winGame();
+                    }
+                }
+            }
+            
+            function transitionToStage(stage, message) {
+                gameState = 'TRANSITIONING';
+                clearInterval(attackInterval);
+                clearInterval(timerInterval);
+                projectiles = [];
+                timerText.style.display = 'none';
+                transitionText.textContent = message;
+                transitionText.style.display = 'block';
+                setTimeout(() => {
+                    setupStage(stage);
+                }, 3000);
+            }
+
+            function createAllSidesProjectile() {
+                if(gameState !== 'PLAYING') return;
+                let x, y, dx, dy;
+                const side = Math.floor(Math.random() * 4);
+                const speed = 0.5 + Math.random() * 1.5;
+                switch (side) {
+                    case 0: x = Math.random() * canvas.width; y = -10; dx = Math.random() * 2 - 1; dy = speed; break;
+                    case 1: x = canvas.width + 10; y = Math.random() * canvas.height; dx = -speed; dy = Math.random() * 2 - 1; break;
+                    case 2: x = Math.random() * canvas.width; y = canvas.height + 10; dx = Math.random() * 2 - 1; dy = -speed; break;
+                    case 3: x = -10; y = Math.random() * canvas.height; dx = speed; dy = Math.random() * 2 - 1; break;
+                }
+                createProjectile(x, y, dx, dy, 5, 'white');
+            }
+
+            function createSideCalibratedProjectile() {
+                if (gameState !== 'PLAYING') return;
+                const fromLeft = Math.random() > 0.5;
+                const groundAttackY = canvas.height - player.size * 1.5;
+                const airAttackY = canvas.height - player.size * 6;
+                const y = Math.random() > 0.5 ? groundAttackY : airAttackY;
+                const x = fromLeft ? -10 : canvas.width + 10;
+                const dx = fromLeft ? 2 + Math.random() * 2 : -(2 + Math.random() * 2);
+                createProjectile(x, y, dx, 0, 8, 'white');
+            }
+
+            function createFlappyObstacle() {
+                if (gameState !== 'PLAYING') return;
+                const gapHeight = 150;
+                const minHeight = 50;
+                const gapY = minHeight + Math.random() * (canvas.height - minHeight * 2 - gapHeight);
+                obstacles.push({ x: canvas.width, width: 40, gapY: gapY, gapHeight: gapHeight, speed: 2.5 });
+            }
+
+            function createProjectile(x, y, dx, dy, size, color) {
+                projectiles.push({ x, y, dx, dy, size, color });
+            }
+
+            function update() {
+                if (gameState !== 'PLAYING') return;
+
+                if (currentStage === 1) {
+                    if (keys['ArrowUp'] && player.y > player.size) player.y -= player.speed;
+                    if (keys['ArrowDown'] && player.y < canvas.height - player.size) player.y += player.speed;
+                } else if (currentStage === 2) {
+                    if (keys['ArrowUp'] && player.onGround) { player.vy = JUMP_POWER; player.onGround = false; }
+                    player.vy += GRAVITY; player.y += player.vy;
+                    if (player.y >= canvas.height - player.size) { player.y = canvas.height - player.size; player.vy = 0; player.onGround = true; }
+                } else if (currentStage === 3) {
+                    if (keys['ArrowUp'] || keys[' ']) { player.vy = JUMP_POWER / 2.2; }
+                    player.vy += GRAVITY; player.y += player.vy;
+                }
+                
+                if (currentStage !== 3) {
+                    if (keys['ArrowLeft'] && player.x > player.size) player.x -= player.speed;
+                    if (keys['ArrowRight'] && player.x < canvas.width - player.size) player.x += player.speed;
+                }
+
+                if (currentStage === 1 || currentStage === 2) {
+                    projectiles.forEach((p, index) => {
+                        p.x += p.dx; p.y += p.dy;
+                        const dist = Math.hypot(player.x - p.x, player.y - p.y);
+                        if (dist < player.size + p.size) loseGame();
+                        if (p.x < -20 || p.x > canvas.width + 20 || p.y < -20 || p.y > canvas.height + 20) projectiles.splice(index, 1);
+                    });
+                }
+                if (currentStage === 3) {
+                    if (player.y < player.size) { loseGame(); }
+                    if (player.y > canvas.height - player.size) { player.y = canvas.height - player.size; player.vy = 0; }
+                    obstacles.forEach(obs => {
+                        obs.x -= obs.speed;
+                        if (player.x + player.size > obs.x && player.x - player.size < obs.x + obs.width &&
+                            (player.y - player.size < obs.gapY || player.y + player.size > obs.gapY + obs.gapHeight)) {
+                            loseGame();
+                        }
+                    });
+                    obstacles = obstacles.filter(obs => obs.x + obs.width > 0);
+                }
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                if (gameState === 'PLAYING' || gameState === 'TRANSITIONING') {
+                    ctx.fillStyle = 'red';
+                    ctx.beginPath();
+                    ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    if (gameState === 'PLAYING') {
+                        projectiles.forEach(p => {
+                            ctx.fillStyle = p.color;
+                            ctx.beginPath();
+                            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                            ctx.fill();
+                        });
+                        obstacles.forEach(obs => {
+                            ctx.fillStyle = 'white';
+                            ctx.fillRect(obs.x, 0, obs.width, obs.gapY);
+                            ctx.fillRect(obs.x, obs.gapY + obs.gapHeight, obs.width, canvas.height - (obs.gapY + obs.gapHeight));
+                        });
+                    }
+                }
+            }
+
+            function gameLoop() {
+                update();
+                draw();
+                requestAnimationFrame(gameLoop);
+            }
+            
+            function loseGame() {
+                if (gameState === 'LOSE') return;
+                gameState = 'LOSE';
+                clearInterval(attackInterval);
+                clearInterval(timerInterval);
+                timerText.textContent = "FALHA. REINICIANDO...";
+                setTimeout(() => setupStage(1), 2000);
+            }
+
+            function winGame() {
+                gameState = 'WIN';
+                clearInterval(timerInterval);
+                clearInterval(attackInterval);
+                rewardScreen.style.display = 'flex';
+
+                let countdown = 3;
+                const countdownDisplay = document.getElementById('final-countdown');
+                countdownDisplay.textContent = countdown;
+
+                const finalTimerId = setInterval(() => {
+                    countdown--;
+                    if (countdownDisplay) countdownDisplay.textContent = countdown;
+                    if (countdown <= 0) {
+                        clearInterval(finalTimerId);
+                        window.location.href = "../index.html";
+                    }
+                }, 1000);
+            }
+            
+            document.addEventListener('keydown', (e) => {
+                keys[e.key] = true;
+                if(e.key === ' ' && gameState === 'PLAYING' && currentStage === 3) {
+                    e.preventDefault();
+                }
+            });
+            document.addEventListener('keyup', (e) => { keys[e.key] = false; });
+
+            setupStage(1);
+            gameLoop();
+        });
+    </script>
+</body>
+</html>

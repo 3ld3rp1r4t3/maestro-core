@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ALERTA DE INTRUSÃO - NÍVEL 2</title>
+    <title>ALERTA DE INTRUSÃO</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Rubik+Glitch&family=VT323&display=swap');
         body {
             background-color: #000;
             color: #ff0000;
@@ -16,6 +16,8 @@
             height: 100vh;
             margin: 0;
             text-align: center;
+            overflow: hidden;
+            transition: all 0.2s;
         }
         .container {
             border: 2px solid #ff0000;
@@ -48,165 +50,177 @@
             cursor: pointer;
             transition: all 0.1s;
         }
-        .symbol-button:hover {
+        .symbol-button:hover:not(:disabled) {
             background-color: #ff0000;
             color: #000;
         }
-        .symbol-flash {
-            animation: flash 0.5s;
+        .symbol-flash { animation: flash 0.5s; }
+        .symbol-clicked { animation: click-feedback 0.3s; }
+        
+        /* EFEITOS DE GLITCH */
+        .glitch-active::after {
+            content: ' '; display: block; position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(255, 0, 0, 0.05);
+            opacity: 0; z-index: 1000; pointer-events: none;
+            animation: glitch-flicker 0.3s infinite;
         }
-        #success-link {
-            display: none;
-            margin-top: 2rem;
+        .glitch-intense {
+            animation: screen-shake 0.2s infinite;
         }
-        #success-link a {
-            color: #00FF41;
-            font-size: 2.5rem;
-            text-decoration: none;
-            animation: pulse-green 1s infinite;
-        }
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.7; }
-            100% { opacity: 1; }
-        }
-        @keyframes pulse-green {
-            0% { text-shadow: 0 0 10px #00FF41; }
-            50% { text-shadow: 0 0 20px #00FF41; }
-            100% { text-shadow: 0 0 10px #00FF41; }
-        }
-        @keyframes flash {
-            from, to { background-color: transparent; color: #ff0000; }
-            50% { background-color: #fff; color: #000; }
+
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+        @keyframes flash { from, to { background-color: transparent; color: #ff0000; } 50% { background-color: #fff; color: #000; } }
+        @keyframes click-feedback { 50% { background-color: #fff; border-color: #fff; color: #000; transform: scale(0.95); } }
+        @keyframes glitch-flicker { 0% { opacity: 0; } 50% { opacity: 1; } 52% { opacity: 0; } 55% { opacity: 0.8; } 100% { opacity: 0; } }
+        @keyframes screen-shake {
+            0%, 100% { transform: translateX(0) translateY(0); }
+            25% { transform: translateX(-5px) translateY(-2px); }
+            50% { transform: translateX(5px) translateY(3px); }
+            75% { transform: translateY(-5px) translateX(2px); }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div id="status-display">> ALERTA! NÍVEL 2. EXPURGO EM T-<span id="timer">30</span> SEGUNDOS.</div>
+        <div id="status-display"></div>
         <div id="symbol-grid"></div>
-        <div id="success-link">
-            <a href="#">[PORTA DE SEGURANÇA 2.2]</a>
         </div>
+
+    <div id="purge-overlay" style="display: none;">
+        <div id="purge-text">EXPURGO</div>
     </div>
 
     <script>
         document.addEventListener("DOMContentLoaded", function() {
-            // --- CONFIGURAÇÕES DA SALA ---
-            const GRID_SIZE = 9;
-            const SEQUENCE_LENGTH = 4;
-            const TIMER_SECONDS = 30;
+            const levels = {
+                1: { title: "> ALERTA! NÍVEL 2. EXPURGO EM ", sequenceLength: 4, timer: 30, speed: 800, glitch: 0 },
+                2: { title: "> ALERTA! NÍVEL 3. DEFESAS ATIVAS. EXPURGO EM ", sequenceLength: 5, timer: 25, speed: 650, glitch: 0 },
+                3: { title: "> ALERTA MÁXIMO! NÍVEL 4. CONTRAMEDIDAS. EXPURGO EM ", sequenceLength: 6, timer: 20, speed: 500, glitch: 1 },
+                4: { title: ">> KERNEL EXPOSTO. VIOLAÇÃO IMINENTE. EXPURGO EM ", sequenceLength: 7, timer: 10, speed: 400, glitch: 2 }
+            };
+            let currentLevel = 1;
+
             const SYMBOL_POOL = ['⏃', '⎔', '⍲', '⍋', '⍬', '⎓', '⏣', '⎶', '⏁', '⍯', '⍰', '⍆'];
-
-            // --- ELEMENTOS DA INTERFACE ---
+            const container = document.querySelector('.container');
             const statusDisplay = document.getElementById('status-display');
-            const timerDisplay = document.getElementById('timer');
             const grid = document.getElementById('symbol-grid');
-            const successLink = document.getElementById('success-link');
 
-            // --- VARIÁVEIS DE ESTADO DO JOGO ---
-            let sequence = [];
-            let playerSequence = [];
-            let canClick = false;
-            let timerId;
+            let sequence = [], playerSequence = [], canClick = false, timerId;
 
-            function startGame() {
-                // Reset
+            function startGame(level) {
+                const config = levels[level];
                 canClick = false;
                 playerSequence = [];
                 sequence = [];
                 grid.innerHTML = '';
-                successLink.style.display = 'none';
-                statusDisplay.innerHTML = `> ALERTA! NÍVEL 2. EXPURGO EM T-<span id="timer">${TIMER_SECONDS}</span> SEGUNDOS.`;
-                document.getElementById('timer').textContent = TIMER_SECONDS; // Garante que o timer reinicie visualmente
-
-                // Gera símbolos aleatórios para a grade
-                let gridSymbols = [...SYMBOL_POOL].sort(() => 0.5 - Math.random()).slice(0, GRID_SIZE);
+                statusDisplay.innerHTML = `${config.title}<span id="timer">${config.timer}</span> SEGUNDOS.`;
                 
+                document.body.classList.remove('glitch-active', 'glitch-intense');
+                if (config.glitch === 1) document.body.classList.add('glitch-active');
+                if (config.glitch === 2) document.body.classList.add('glitch-intense');
+
+                let gridSymbols = [...SYMBOL_POOL].sort(() => 0.5 - Math.random()).slice(0, 9);
                 gridSymbols.forEach(symbol => {
                     const button = document.createElement('button');
                     button.className = 'symbol-button';
                     button.textContent = symbol;
-                    button.onclick = () => handleSymbolClick(symbol);
+                    button.onclick = (event) => handleSymbolClick(symbol, event.target);
                     grid.appendChild(button);
                 });
 
-                // Gera a sequência secreta a partir dos símbolos na grade
-                for (let i = 0; i < SEQUENCE_LENGTH; i++) {
+                for (let i = 0; i < config.sequenceLength; i++) {
                     sequence.push(gridSymbols[Math.floor(Math.random() * gridSymbols.length)]);
                 }
-
-                // Inicia o jogo
-                setTimeout(displaySequence, 2000); // Dá 2 segundos para o jogador se preparar
+                setTimeout(() => displaySequence(level), 2000);
             }
 
-            function displaySequence() {
+            function displaySequence(level) {
                 let i = 0;
+                const buttons = Array.from(grid.children);
+                buttons.forEach(btn => btn.disabled = true);
                 const intervalId = setInterval(() => {
                     if (i >= sequence.length) {
                         clearInterval(intervalId);
                         canClick = true;
-                        startTimer();
+                        buttons.forEach(btn => btn.disabled = false);
+                        startTimer(level);
                         return;
                     }
-                    const symbolToFlash = sequence[i];
-                    const buttons = Array.from(grid.children);
-                    const buttonToFlash = buttons.find(btn => btn.textContent === symbolToFlash);
-                    
+                    const buttonToFlash = buttons.find(btn => btn.textContent === sequence[i]);
                     if (buttonToFlash) {
                         buttonToFlash.classList.add('symbol-flash');
-                        setTimeout(() => buttonToFlash.classList.remove('symbol-flash'), 500);
+                        setTimeout(() => buttonToFlash.classList.remove('symbol-flash'), levels[level].speed / 2);
                     }
                     i++;
-                }, 800); // Velocidade que os símbolos piscam
+                }, levels[level].speed);
             }
 
-            function handleSymbolClick(symbol) {
+            function handleSymbolClick(symbol, buttonElement) {
                 if (!canClick) return;
+                if (buttonElement) {
+                    buttonElement.classList.add('symbol-clicked');
+                    setTimeout(() => buttonElement.classList.remove('symbol-clicked'), 300);
+                }
                 playerSequence.push(symbol);
-                
-                // Verifica se o clique está correto até agora
                 for (let i = 0; i < playerSequence.length; i++) {
                     if (playerSequence[i] !== sequence[i]) {
                         loseGame("SEQUÊNCIA INCORRETA");
                         return;
                     }
                 }
-
-                // Verifica se a sequência foi completada
                 if (playerSequence.length === sequence.length) {
                     winGame();
                 }
             }
 
-            function startTimer() {
-                let timeLeft = TIMER_SECONDS;
+            function startTimer(level) {
+                let timeLeft = levels[level].timer;
+                const timerDisplay = document.getElementById('timer');
+                if (timerId) clearInterval(timerId);
                 timerId = setInterval(() => {
                     timeLeft--;
-                    document.getElementById('timer').textContent = timeLeft;
+                    if (timerDisplay) timerDisplay.textContent = timeLeft;
                     if (timeLeft <= 0) {
                         loseGame("TEMPO ESGOTADO");
                     }
                 }, 1000);
             }
-
+            
+            // *** MUDANÇA PRINCIPAL AQUI (FUNÇÃO WINGAME) ***
             function winGame() {
                 clearInterval(timerId);
-                canClick = false;
-                grid.innerHTML = '';
-                statusDisplay.textContent = "> SEQUÊNCIA VÁLIDA. ACESSO LIBERADO.";
-                successLink.style.display = 'block';
+                if (currentLevel < Object.keys(levels).length) {
+                    currentLevel++;
+                    canClick = false;
+                    grid.innerHTML = `<h2 style="grid-column: 1 / -1;">> NÍVEL DE SEGURANÇA CONTORNADO. ACESSANDO PRÓXIMA CAMADA...</h2>`;
+                    setTimeout(() => startGame(currentLevel), 3000);
+                } else {
+                    canClick = false;
+                    grid.innerHTML = '';
+                    statusDisplay.textContent = "> FIREWALL FINAL VIOLADO. ACESSANDO O NÚCLEO...";
+                    
+                    // Redireciona automaticamente para o Ato III após 2 segundos
+                    setTimeout(() => {
+                        window.location.href = "nucleo.html";
+                    }, 2000);
+                }
             }
 
             function loseGame(reason) {
                 clearInterval(timerId);
                 canClick = false;
-                grid.innerHTML = `<h2 style="grid-column: 1 / -1;">> ${reason}. REINICIANDO PROTOCOLO...</h2>`;
-                setTimeout(startGame, 3000); // Reinicia após 3 segundos
+                container.style.display = 'none';
+                const purgeOverlay = document.getElementById('purge-overlay');
+                if (purgeOverlay) {
+                    purgeOverlay.style.display = 'flex';
+                }
+                setTimeout(() => {
+                    window.location.href = "../index.html";
+                }, 2900);
             }
 
-            // Inicia o jogo quando a página carrega
-            startGame();
+            startGame(currentLevel);
         });
     </script>
 </body>
